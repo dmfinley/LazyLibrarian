@@ -1,9 +1,9 @@
-import logging
+
 import socket
 import ssl
 import struct
 import zlib
-
+from lazylibrarian import logger
 from .rencode import dumps, loads
 
 RPC_RESPONSE = 1
@@ -13,7 +13,7 @@ RPC_EVENT = 3
 #MESSAGE_HEADER_SIZE = 5
 READ_SIZE = 10
 
-logger = logging.getLogger(__name__)
+#logger = logging.getLogger(__name__)
 
 class ConnectionLostException(Exception):
     pass
@@ -30,7 +30,7 @@ class DelugeRPCClient(object):
         self.username = username
         self.password = password
         
-        self.request_id = 1
+        self.request_id = 0
         self.connected = False
         self._socket = ssl.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
         self._socket.settimeout(self.timeout)
@@ -42,7 +42,10 @@ class DelugeRPCClient(object):
         logger.info('Connecting to %s:%s' % (self.host, self.port))
         self._socket.connect((self.host, self.port))
         logger.debug('Connected to Deluge, logging in')
-        result = self.call('daemon.login', self.username, self.password)
+        if self.username:
+            result = self.call('daemon.login', self.username, self.password)
+        else:
+            result = self.call('auth.login', self.password)
         logger.debug('Logged in with value %r' % result)
         self.connected = True
     

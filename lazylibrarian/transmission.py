@@ -17,7 +17,6 @@ from lazylibrarian import logger, request
 
 import time
 import json
-import base64
 import urlparse
 import lazylibrarian
 
@@ -30,13 +29,13 @@ import lazylibrarian
 
 def addTorrent(link):
     method = 'torrent-add'
-
-    if link.endswith('.torrent'):
-        with open(link, 'rb') as f:
-            metainfo = str(base64.b64encode(f.read()))
-        arguments = {'metainfo': metainfo }
-    else:
-        arguments = {'filename': link }
+    # print type(link), link
+    # if link.endswith('.torrent'):
+    #    with open(link, 'rb') as f:
+    #        metainfo = str(base64.b64encode(f.read()))
+    #    arguments = {'metainfo': metainfo }
+    # else:
+    arguments = {'filename': link, 'download-dir': lazylibrarian.DOWNLOAD_DIR}
 
     response = torrentAction(method, arguments)
 
@@ -115,16 +114,29 @@ def removeTorrent(torrentid, remove_data=False):
             response = torrentAction(method, arguments)
             return True
         else:
-            logger.info('%s has not finished seeding yet, torrent will not be removed, will try again on next run' % name)
+            logger.info('%s has not finished seeding yet, torrent will not be removed, \
+                        will try again on next run' % name)
     except:
         return False
 
     return False
 
+def checkLink():
+
+    method = 'session-stats'
+    arguments = {}
+
+    response = torrentAction(method, arguments)
+    if response:
+        if response['result'] == 'success':
+            # does transmission handle labels?
+            return "Transmission login successful"
+    return "Transmission login FAILED\nCheck debug log"
 
 def torrentAction(method, arguments):
 
     host = lazylibrarian.TRANSMISSION_HOST
+    port = lazylibrarian.TRANSMISSION_PORT
     username = lazylibrarian.TRANSMISSION_USER
     password = lazylibrarian.TRANSMISSION_PASS
 
@@ -140,7 +152,10 @@ def torrentAction(method, arguments):
 
     if not parts[0] in ("http", "https"):
         parts[0] = "http"
-
+        
+    if not ':' in parts[1]:
+        parts[1] += ":%s" % port
+        
     if not parts[2].endswith("/rpc"):
         parts[2] += "/transmission/rpc"
 
@@ -149,7 +164,7 @@ def torrentAction(method, arguments):
     # Retrieve session id
     auth = (username, password) if username and password else None
     response = request.request_response(host, auth=auth,
-        whitelist_status_code=[401, 409])
+                                        whitelist_status_code=[401, 409])
 
     if response is None:
         logger.error("Error gettings Transmission session ID")
@@ -158,8 +173,8 @@ def torrentAction(method, arguments):
     # Parse response
     if response.status_code == 401:
         if auth:
-            logger.error("Username and/or password not accepted by " \
-                "Transmission")
+            logger.error("Username and/or password not accepted by "
+                         "Transmission")
         else:
             logger.error("Transmission authorization required")
 
@@ -170,15 +185,14 @@ def torrentAction(method, arguments):
         if not session_id:
             logger.error("Expected a Session ID from Transmission")
             return
-
+            
+            
     # Prepare next request
     headers = {'x-transmission-session-id': session_id}
     data = {'method': method, 'arguments': arguments}
 
     response = request.request_json(host, method="POST", data=json.dumps(data),
-        headers=headers, auth=auth)
-
-    print response
+                                    headers=headers, auth=auth)
 
     if not response:
         logger.error("Error sending torrent to Transmission")
